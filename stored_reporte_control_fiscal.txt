@@ -1,0 +1,1154 @@
+Primer versión de Stored Procedure para reporte de control fiscal (fuente de datos)
+
+/****** Object:  StoredProcedure [dbo].[usp_BilyAuditorV4_ReporteControlFiscal]    Script Date: 5/15/2026 1:22:26 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+/* ============================================================
+   V4 - REPORTE CONTROL FISCAL
+   Stored independiente. No llama V3. No usa cache.
+   Objetivo:
+   RS1: Ingresos, gastos, egresos, nómina y utilidad periodo/acumulado
+   RS2: PPD emitidos/recibidos por estatus de pago
+   RS3: CFDI recibidos en listado 69-B por estatus
+   RS4: Cancelaciones emitidos/recibidos por tipo
+   RS5: CFDI recibidos inválidos del periodo
+   RS6: Duplicidades emitidos/recibidos
+   RS7: Indicadores operativos PUE/REP/egresos sin relación
+   ============================================================ */
+ALTER   PROCEDURE [dbo].[usp_BilyAuditorV4_ReporteControlFiscal]
+(
+    @Rfc               VARCHAR(13),
+    @IdSucursal        INT,
+    @Anio              INT,
+    @Mes               TINYINT = NULL,
+    @ToleranciaSaldo   DECIMAL(24,6) = 0,
+    @Diagnostico       BIT = 0
+)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @Mes IS NOT NULL AND (@Mes < 1 OR @Mes > 12)
+    BEGIN
+        RAISERROR('El parámetro @Mes debe estar entre 1 y 12, o NULL.', 16, 1);
+        RETURN;
+    END;
+
+    DECLARE @MesMax TINYINT = ISNULL(@Mes, 12);
+
+    DECLARE @InicioEjercicio DATETIME2(0) =
+        CONVERT(DATETIME2(0), DATETIMEFROMPARTS(@Anio, 1, 1, 0, 0, 0, 0));
+
+    DECLARE @FinEjercicio DATETIME2(0) =
+        CONVERT(DATETIME2(0), DATETIMEFROMPARTS(@Anio + 1, 1, 1, 0, 0, 0, 0));
+
+    DECLARE @InicioPeriodo DATETIME2(0) =
+        CASE
+            WHEN @Mes IS NULL THEN @InicioEjercicio
+            ELSE CONVERT(DATETIME2(0), DATETIMEFROMPARTS(@Anio, @Mes, 1, 0, 0, 0, 0))
+        END;
+
+    DECLARE @FinPeriodo DATETIME2(0) =
+        CASE
+            WHEN @Mes IS NULL THEN @FinEjercicio
+            ELSE CONVERT(DATETIME2(0), DATEADD(MONTH, 1, DATETIMEFROMPARTS(@Anio, @Mes, 1, 0, 0, 0, 0)))
+        END;
+
+    DECLARE @TokenSucursal VARCHAR(50);
+
+    SELECT @TokenSucursal = CONVERT(VARCHAR(50), s.Token)
+    FROM dbo.Sucursales s
+    WHERE s.RFC = @Rfc
+      AND s.IdSucursal = @IdSucursal;
+
+    IF @TokenSucursal IS NULL
+        SET @TokenSucursal = CONCAT(@Rfc, ':', CONVERT(VARCHAR(20), @IdSucursal));
+
+    DECLARE @DiagStart DATETIME2(7) = SYSDATETIME();
+    DECLARE @DiagStep DATETIME2(7) = @DiagStart;
+    DECLARE @DiagNow DATETIME2(7);
+    DECLARE @DiagRows INT;
+    DECLARE @DiagMs INT;
+    DECLARE @DiagTotalMs INT;
+
+    IF @Diagnostico = 1
+        RAISERROR('[ReporteControlFiscalV4] Inicio', 0, 1) WITH NOWAIT;
+
+    CREATE TABLE #Meses
+    (
+        MesNum INT NOT NULL PRIMARY KEY,
+        Periodo VARCHAR(7) NOT NULL,
+        Inicio DATETIME2(0) NOT NULL,
+        FinExcl DATETIME2(0) NOT NULL
+    );
+
+    INSERT INTO #Meses(MesNum, Periodo, Inicio, FinExcl)
+    SELECT
+        v.MesNum,
+        CONCAT(@Anio, '-', RIGHT('00' + CONVERT(VARCHAR(2), v.MesNum), 2)),
+        CONVERT(DATETIME2(0), DATETIMEFROMPARTS(@Anio, v.MesNum, 1, 0, 0, 0, 0)),
+        CONVERT(DATETIME2(0), DATEADD(MONTH, 1, DATETIMEFROMPARTS(@Anio, v.MesNum, 1, 0, 0, 0, 0)))
+    FROM (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12)) v(MesNum)
+    WHERE v.MesNum <= @MesMax;
+
+    /* ============================================================
+       Bases mínimas emitidos/recibidos para el ejercicio hasta @MesMax
+       ============================================================ */
+
+    CREATE TABLE #EmitidosBase
+    (
+        UUID VARCHAR(50) NOT NULL PRIMARY KEY,
+        MesNum INT NOT NULL,
+        Periodo VARCHAR(7) NOT NULL,
+        TipoDeComprobante CHAR(1) NOT NULL,
+        Status TINYINT NULL,
+        Fecha DATETIME NULL,
+        FechaCancelacion DATETIME NULL,
+        MetodoPago VARCHAR(10) NULL,
+        FormaPago VARCHAR(10) NULL,
+        Moneda VARCHAR(10) NULL,
+        TipoCambio DECIMAL(24,6) NULL,
+        RFCEmisor VARCHAR(20) NULL,
+        RFCReceptor VARCHAR(20) NULL,
+        UsoCFDI VARCHAR(10) NULL,
+        Total DECIMAL(24,6) NOT NULL,
+        TotalMXN DECIMAL(24,6) NOT NULL,
+        NetoMXN DECIMAL(24,6) NOT NULL,
+        SolicitudCancelacionActiva BIT NULL,
+        IdEstatusCancelacion VARCHAR(350) NULL
+    );
+
+    CREATE TABLE #RecibidosBase
+    (
+        UUID VARCHAR(50) NOT NULL PRIMARY KEY,
+        MesNum INT NOT NULL,
+        Periodo VARCHAR(7) NOT NULL,
+        TipoDeComprobante CHAR(1) NOT NULL,
+        Status TINYINT NULL,
+        Fecha DATETIME NULL,
+        FechaCancelacion DATETIME NULL,
+        MetodoPago VARCHAR(10) NULL,
+        FormaPago VARCHAR(10) NULL,
+        Moneda VARCHAR(10) NULL,
+        TipoCambio DECIMAL(24,6) NULL,
+        RFCEmisor VARCHAR(20) NULL,
+        RFCReceptor VARCHAR(20) NULL,
+        UsoCFDI VARCHAR(10) NULL,
+        Total DECIMAL(24,6) NOT NULL,
+        TotalMXN DECIMAL(24,6) NOT NULL,
+        NetoMXN DECIMAL(24,6) NOT NULL,
+        SolicitudCancelacionActiva BIT NULL,
+        IdEstatusCancelacion VARCHAR(350) NULL,
+        EstatusListado69B VARCHAR(50) NULL
+    );
+
+    INSERT INTO #EmitidosBase
+    (
+        UUID, MesNum, Periodo, TipoDeComprobante, Status, Fecha, FechaCancelacion,
+        MetodoPago, FormaPago, Moneda, TipoCambio, RFCEmisor, RFCReceptor, UsoCFDI,
+        Total, TotalMXN, NetoMXN, SolicitudCancelacionActiva, IdEstatusCancelacion
+    )
+    SELECT
+        c.UUID,
+        MesNum =
+            CASE
+                WHEN c.TipoDeComprobante = 'I'
+                 AND c.RFCReceptor = 'XAXX010101000'
+                 AND c.UsoCFDI = 'S01'
+                 AND c.Anio IS NOT NULL
+                 AND c.Meses IN ('01','02','03','04','05','06','07','08','09','10','11','12')
+                THEN TRY_CONVERT(INT, c.Meses)
+                ELSE MONTH(c.Fecha)
+            END,
+        Periodo =
+            CONCAT(
+                @Anio,
+                '-',
+                RIGHT('00' + CONVERT(VARCHAR(2),
+                    CASE
+                        WHEN c.TipoDeComprobante = 'I'
+                         AND c.RFCReceptor = 'XAXX010101000'
+                         AND c.UsoCFDI = 'S01'
+                         AND c.Anio IS NOT NULL
+                         AND c.Meses IN ('01','02','03','04','05','06','07','08','09','10','11','12')
+                        THEN TRY_CONVERT(INT, c.Meses)
+                        ELSE MONTH(c.Fecha)
+                    END
+                ), 2)
+            ),
+        c.TipoDeComprobante,
+        c.Status,
+        c.Fecha,
+        c.FechaCancelacion,
+        c.MetodoPago,
+        c.FormaPago,
+        c.Moneda,
+        c.TipoCambio,
+        c.RFCEmisor,
+        c.RFCReceptor,
+        c.UsoCFDI,
+        CAST(ISNULL(c.Total,0) AS DECIMAL(24,6)),
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        ),
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN (ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)) * c.TipoCambio
+                ELSE ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)
+            END AS DECIMAL(24,6)
+        ),
+        c.SolicitudCancelacionActiva,
+        c.IdEstatusCancelacion
+    FROM dbo.SucursalComprobantes sc
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sc.UUID
+    WHERE sc.RFC = @Rfc
+      AND sc.IdSucursal = @IdSucursal
+      AND c.TipoDeComprobante IN ('I','E','N')
+      AND
+      (
+            (
+                NOT
+                (
+                    c.TipoDeComprobante = 'I'
+                    AND c.RFCReceptor = 'XAXX010101000'
+                    AND c.UsoCFDI = 'S01'
+                    AND c.Anio IS NOT NULL
+                    AND c.Meses IS NOT NULL
+                    AND c.Periodicidad IS NOT NULL
+                )
+                AND c.Fecha >= @InicioEjercicio
+                AND c.Fecha <  @FinPeriodo
+            )
+            OR
+            (
+                c.TipoDeComprobante = 'I'
+                AND c.RFCReceptor = 'XAXX010101000'
+                AND c.UsoCFDI = 'S01'
+                AND c.Anio = @Anio
+                AND c.Meses IN ('01','02','03','04','05','06','07','08','09','10','11','12')
+                AND TRY_CONVERT(INT, c.Meses) <= @MesMax
+            )
+      )
+    OPTION (RECOMPILE);
+
+    INSERT INTO #RecibidosBase
+    (
+        UUID, MesNum, Periodo, TipoDeComprobante, Status, Fecha, FechaCancelacion,
+        MetodoPago, FormaPago, Moneda, TipoCambio, RFCEmisor, RFCReceptor, UsoCFDI,
+        Total, TotalMXN, NetoMXN, SolicitudCancelacionActiva, IdEstatusCancelacion, EstatusListado69B
+    )
+    SELECT
+        c.UUID,
+        MesNum =
+            CASE
+                WHEN c.TipoDeComprobante = 'I'
+                 AND c.RFCReceptor = 'XAXX010101000'
+                 AND c.UsoCFDI = 'S01'
+                 AND c.Anio IS NOT NULL
+                 AND c.Meses IN ('01','02','03','04','05','06','07','08','09','10','11','12')
+                THEN TRY_CONVERT(INT, c.Meses)
+                ELSE MONTH(c.Fecha)
+            END,
+        Periodo =
+            CONCAT(
+                @Anio,
+                '-',
+                RIGHT('00' + CONVERT(VARCHAR(2),
+                    CASE
+                        WHEN c.TipoDeComprobante = 'I'
+                         AND c.RFCReceptor = 'XAXX010101000'
+                         AND c.UsoCFDI = 'S01'
+                         AND c.Anio IS NOT NULL
+                         AND c.Meses IN ('01','02','03','04','05','06','07','08','09','10','11','12')
+                        THEN TRY_CONVERT(INT, c.Meses)
+                        ELSE MONTH(c.Fecha)
+                    END
+                ), 2)
+            ),
+        c.TipoDeComprobante,
+        c.Status,
+        c.Fecha,
+        c.FechaCancelacion,
+        c.MetodoPago,
+        c.FormaPago,
+        c.Moneda,
+        c.TipoCambio,
+        c.RFCEmisor,
+        c.RFCReceptor,
+        c.UsoCFDI,
+        CAST(ISNULL(c.Total,0) AS DECIMAL(24,6)),
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        ),
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN (ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)) * c.TipoCambio
+                ELSE ISNULL(c.Subtotal,0) - ISNULL(c.Descuento,0)
+            END AS DECIMAL(24,6)
+        ),
+        c.SolicitudCancelacionActiva,
+        c.IdEstatusCancelacion,
+        sr.EstatusListado69B
+    FROM dbo.SucursalRecepcion sr
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sr.UUID
+    WHERE sr.RFC = @Rfc
+      AND sr.IdSucursal = @IdSucursal
+      AND c.TipoDeComprobante IN ('I','E','N')
+      AND c.Fecha >= @InicioEjercicio
+      AND c.Fecha <  @FinPeriodo
+      AND c.RFCEmisor <> @Rfc
+    OPTION (RECOMPILE);
+
+
+    CREATE TABLE #EmitidosPeriodo (UUID VARCHAR(50) NOT NULL PRIMARY KEY);
+    INSERT INTO #EmitidosPeriodo(UUID)
+    SELECT UUID
+    FROM #EmitidosBase
+    WHERE @Mes IS NULL OR MesNum = @Mes;
+
+    CREATE TABLE #RecibidosPeriodo (UUID VARCHAR(50) NOT NULL PRIMARY KEY);
+    INSERT INTO #RecibidosPeriodo(UUID)
+    SELECT UUID
+    FROM #RecibidosBase
+    WHERE @Mes IS NULL OR MesNum = @Mes;
+
+    IF @Diagnostico = 1
+    BEGIN
+        SELECT @DiagRows = COUNT(1) FROM #EmitidosBase;
+        SET @DiagNow = SYSDATETIME();
+        SET @DiagMs = DATEDIFF(MILLISECOND, @DiagStep, @DiagNow);
+        SET @DiagTotalMs = DATEDIFF(MILLISECOND, @DiagStart, @DiagNow);
+        RAISERROR('[ReporteControlFiscalV4] Bases mínimas | Emitidos=%d | PasoMs=%d | TotalMs=%d', 0, 1, @DiagRows, @DiagMs, @DiagTotalMs) WITH NOWAIT;
+        SET @DiagStep = @DiagNow;
+    END;
+
+    /* ============================================================
+       RS1 - Sumatorias periodo/acumulado
+       Ingresos/Gastos basados en NetoMXN como dashboard.
+       Egresos/Nóminas también sobre NetoMXN.
+       ============================================================ */
+
+    ;WITH Totales AS
+    (
+        SELECT
+            Tipo = 'Periodo',
+            Ingresos = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'I' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2)),
+            Gastos = CAST(ROUND(ISNULL((SELECT SUM(r.NetoMXN) FROM #RecibidosBase r WHERE r.MesNum BETWEEN CASE WHEN @Mes IS NULL THEN 1 ELSE @Mes END AND CASE WHEN @Mes IS NULL THEN @MesMax ELSE @Mes END AND r.TipoDeComprobante = 'I' AND r.Status = 0), 0), 2) AS DECIMAL(24,2)),
+            Egresos = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'E' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2)),
+            Nominas = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'N' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2))
+        FROM #EmitidosBase e
+        WHERE e.MesNum BETWEEN CASE WHEN @Mes IS NULL THEN 1 ELSE @Mes END
+                           AND CASE WHEN @Mes IS NULL THEN @MesMax ELSE @Mes END
+
+        UNION ALL
+
+        SELECT
+            Tipo = 'Acumulado',
+            Ingresos = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'I' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2)),
+            Gastos = CAST(ROUND(ISNULL((SELECT SUM(r.NetoMXN) FROM #RecibidosBase r WHERE r.MesNum <= @MesMax AND r.TipoDeComprobante = 'I' AND r.Status = 0), 0), 2) AS DECIMAL(24,2)),
+            Egresos = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'E' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2)),
+            Nominas = CAST(ROUND(ISNULL(SUM(CASE WHEN e.TipoDeComprobante = 'N' AND e.Status = 0 THEN e.NetoMXN ELSE 0 END), 0), 2) AS DECIMAL(24,2))
+        FROM #EmitidosBase e
+        WHERE e.MesNum <= @MesMax
+    )
+    SELECT
+        Tipo,
+        Ingresos,
+        NavegacionIngresos =
+            (
+                SELECT
+                    modulo = 'comprobantes_emitidos',
+                    titulo = 'Ingresos emitidos',
+                    filtros = JSON_QUERY((
+                        SELECT @TokenSucursal AS sucursal_token, @Anio AS anio,
+                               CASE WHEN Tipo = 'Periodo' THEN @Mes ELSE NULL END AS mes,
+                               'I' AS tipo_comprobante, 0 AS status
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ),
+        Gastos,
+        NavegacionGastos =
+            (
+                SELECT
+                    modulo = 'comprobantes_recibidos',
+                    titulo = 'Gastos recibidos',
+                    filtros = JSON_QUERY((
+                        SELECT @TokenSucursal AS sucursal_token, @Anio AS anio,
+                               CASE WHEN Tipo = 'Periodo' THEN @Mes ELSE NULL END AS mes,
+                               'I' AS tipo_comprobante, 0 AS status
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ),
+        Egresos,
+        NavegacionEgresos =
+            (
+                SELECT
+                    modulo = 'comprobantes_emitidos',
+                    titulo = 'Egresos emitidos',
+                    filtros = JSON_QUERY((
+                        SELECT @TokenSucursal AS sucursal_token, @Anio AS anio,
+                               CASE WHEN Tipo = 'Periodo' THEN @Mes ELSE NULL END AS mes,
+                               'E' AS tipo_comprobante, 0 AS status
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ),
+        Nominas,
+        NavegacionNominas =
+            (
+                SELECT
+                    modulo = 'comprobantes_emitidos',
+                    titulo = 'Nóminas emitidas',
+                    filtros = JSON_QUERY((
+                        SELECT @TokenSucursal AS sucursal_token, @Anio AS anio,
+                               CASE WHEN Tipo = 'Periodo' THEN @Mes ELSE NULL END AS mes,
+                               'N' AS tipo_comprobante, 0 AS status
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            ),
+        Utilidad = CAST(ROUND(Ingresos - Egresos - Gastos - Nominas, 2) AS DECIMAL(24,2)),
+        NavegacionUtilidad = CAST(NULL AS NVARCHAR(MAX))
+    FROM Totales
+    ORDER BY CASE WHEN Tipo = 'Periodo' THEN 1 ELSE 2 END;
+
+    /* ============================================================
+       Preparación saldos PPD para RS2
+       Clasificación con tolerancia configurable.
+       ============================================================ */
+
+    CREATE TABLE #PagosAplicados
+    (
+        UUID VARCHAR(50) NOT NULL PRIMARY KEY,
+        TotalPagado DECIMAL(24,6) NOT NULL
+    );
+
+    INSERT INTO #PagosAplicados(UUID, TotalPagado)
+    SELECT
+        dr.IdDocumento,
+        CAST(SUM(ISNULL(dr.ImpPagado,0)) AS DECIMAL(24,6))
+    FROM dbo.PagosDoctoRelacionado dr
+    INNER JOIN dbo.Comprobantes rep
+        ON rep.UUID = dr.UUID
+       AND rep.Status = 0
+    WHERE dr.IdDocumento IS NOT NULL
+    GROUP BY dr.IdDocumento;
+
+    CREATE TABLE #NotasCreditoAplicadas
+    (
+        UUID VARCHAR(50) NOT NULL PRIMARY KEY,
+        TotalEgresos DECIMAL(24,6) NOT NULL
+    );
+
+    INSERT INTO #NotasCreditoAplicadas(UUID, TotalEgresos)
+    SELECT
+        rel.UUIDRelacionado,
+        CAST(SUM(ISNULL(nc.Total,0)) AS DECIMAL(24,6))
+    FROM dbo.Comprobantes nc
+    INNER JOIN dbo.ComprobanteRelaciones rel
+        ON rel.UUID = nc.UUID
+    WHERE nc.TipoDeComprobante = 'E'
+      AND nc.Status = 0
+      AND rel.TipoRelacion = '01'
+    GROUP BY rel.UUIDRelacionado;
+
+    CREATE TABLE #PPD
+    (
+        Origen VARCHAR(20) NOT NULL,
+        UUID VARCHAR(50) NOT NULL,
+        TotalMXN DECIMAL(24,6) NOT NULL,
+        SaldoFinal DECIMAL(24,6) NOT NULL,
+        ExcedenteSobrepagado DECIMAL(24,6) NOT NULL,
+        EstatusPago VARCHAR(30) NOT NULL
+    );
+
+    INSERT INTO #PPD(Origen, UUID, TotalMXN, SaldoFinal, ExcedenteSobrepagado, EstatusPago)
+    SELECT
+        'Emitidos',
+        e.UUID,
+        e.TotalMXN,
+        SaldoFinal = CAST(ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0) AS DECIMAL(24,6)),
+        ExcedenteSobrepagado =
+            CAST
+            (
+                CASE
+                    WHEN (ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) < -@ToleranciaSaldo
+                    THEN ABS(ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0))
+                    ELSE 0
+                END
+            AS DECIMAL(24,6)),
+        CASE
+            WHEN ABS(ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) <= @ToleranciaSaldo THEN 'liquidado'
+            WHEN (ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) > @ToleranciaSaldo THEN 'pendiente'
+            WHEN (ISNULL(e.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) < -@ToleranciaSaldo THEN 'sobrepagado'
+            ELSE 'indeterminado'
+        END
+    FROM #EmitidosBase e
+    INNER JOIN #EmitidosPeriodo ep
+        ON ep.UUID = e.UUID
+    LEFT JOIN #PagosAplicados p
+        ON p.UUID = e.UUID
+    LEFT JOIN #NotasCreditoAplicadas nc
+        ON nc.UUID = e.UUID
+    WHERE e.TipoDeComprobante = 'I'
+      AND e.Status = 0
+      AND e.MetodoPago = 'PPD';
+
+    INSERT INTO #PPD(Origen, UUID, TotalMXN, SaldoFinal, ExcedenteSobrepagado, EstatusPago)
+    SELECT
+        'Recibidos',
+        r.UUID,
+        r.TotalMXN,
+        SaldoFinal = CAST(ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0) AS DECIMAL(24,6)),
+        ExcedenteSobrepagado =
+            CAST
+            (
+                CASE
+                    WHEN (ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) < -@ToleranciaSaldo
+                    THEN ABS(ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0))
+                    ELSE 0
+                END
+            AS DECIMAL(24,6)),
+        CASE
+            WHEN ABS(ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) <= @ToleranciaSaldo THEN 'liquidado'
+            WHEN (ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) > @ToleranciaSaldo THEN 'pendiente'
+            WHEN (ISNULL(r.Total,0) - ISNULL(p.TotalPagado,0) - ISNULL(nc.TotalEgresos,0)) < -@ToleranciaSaldo THEN 'sobrepagado'
+            ELSE 'indeterminado'
+        END
+    FROM #RecibidosBase r
+    INNER JOIN #RecibidosPeriodo rp
+        ON rp.UUID = r.UUID
+    LEFT JOIN #PagosAplicados p
+        ON p.UUID = r.UUID
+    LEFT JOIN #NotasCreditoAplicadas nc
+        ON nc.UUID = r.UUID
+    WHERE r.TipoDeComprobante = 'I'
+      AND r.Status = 0
+      AND r.MetodoPago = 'PPD';
+
+    /* ============================================================
+       RS2 - PPD emitidos/recibidos por estatus.
+       SobrepagadasImporte representa el excedente sobrepagado,
+       no la suma de totales de los CFDI sobrepagados.
+       ============================================================ */
+    ;WITH Origenes AS
+    (
+        SELECT 'Emitidos' AS Origen, 1 AS Orden
+        UNION ALL SELECT 'Recibidos', 2
+    )
+    SELECT
+        o.Origen,
+        TotalPPD = COUNT(p.UUID),
+        TotalPPDImporte = CAST(ROUND(ISNULL(SUM(p.TotalMXN),0),2) AS DECIMAL(24,2)),
+        Liquidadas = SUM(CASE WHEN p.EstatusPago = 'liquidado' THEN 1 ELSE 0 END),
+        LiquidadasImporte = CAST(ROUND(ISNULL(SUM(CASE WHEN p.EstatusPago = 'liquidado' THEN p.TotalMXN ELSE 0 END),0),2) AS DECIMAL(24,2)),
+        Pendientes = SUM(CASE WHEN p.EstatusPago = 'pendiente' THEN 1 ELSE 0 END),
+        PendientesImporte = CAST(ROUND(ISNULL(SUM(CASE WHEN p.EstatusPago = 'pendiente' THEN p.TotalMXN ELSE 0 END),0),2) AS DECIMAL(24,2)),
+        Sobrepagadas = SUM(CASE WHEN p.EstatusPago = 'sobrepagado' THEN 1 ELSE 0 END),
+        SobrepagadasImporte = CAST(ROUND(ISNULL(SUM(CASE WHEN p.EstatusPago = 'sobrepagado' THEN p.ExcedenteSobrepagado ELSE 0 END),0),2) AS DECIMAL(24,2)),
+        NavegacionTotalPPD = (
+            SELECT modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                   titulo = CONCAT(o.Origen, ' PPD total'),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, @Anio AS anio, @Mes AS mes, 'I' AS tipo_comprobante, 0 AS status, 'PPD' AS metodo_pago FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        ),
+        NavegacionLiquidadas = (
+            SELECT modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                   titulo = CONCAT(o.Origen, ' PPD liquidadas'),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, @Anio AS anio, @Mes AS mes, 'I' AS tipo_comprobante, 0 AS status, 'PPD' AS metodo_pago, 'liquidado' AS estatus_pago_cfdi FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        ),
+        NavegacionPendientes = (
+            SELECT modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                   titulo = CONCAT(o.Origen, ' PPD pendientes'),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, @Anio AS anio, @Mes AS mes, 'I' AS tipo_comprobante, 0 AS status, 'PPD' AS metodo_pago, 'pendiente' AS estatus_pago_cfdi FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        ),
+        NavegacionSobrepagadas = (
+            SELECT modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                   titulo = CONCAT(o.Origen, ' PPD sobrepagadas'),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, @Anio AS anio, @Mes AS mes, 'I' AS tipo_comprobante, 0 AS status, 'PPD' AS metodo_pago, 'sobrepagado' AS estatus_pago_cfdi FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        )
+    FROM Origenes o
+    LEFT JOIN #PPD p
+        ON p.Origen = o.Origen
+    GROUP BY o.Origen, o.Orden
+    ORDER BY o.Orden;
+
+    /* ============================================================
+       RS3 - CFDI recibidos en listados negros
+       ============================================================ */
+    ;WITH Situaciones AS
+    (
+        SELECT 'Presunto' AS Situacion, 1 AS Orden
+        UNION ALL SELECT 'Definitivo', 2
+        UNION ALL SELECT 'Desvirtuado', 3
+        UNION ALL SELECT 'Sentencia Favorable', 4
+    ),
+    Recibidos69BHistorico AS
+    (
+        SELECT
+            sr.UUID,
+            sr.EstatusListado69B,
+            TotalMXN =
+                CAST
+                (
+                    CASE
+                        WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                        WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                        ELSE ISNULL(c.Total,0)
+                    END
+                AS DECIMAL(24,6))
+        FROM dbo.SucursalRecepcion sr
+        INNER JOIN dbo.Comprobantes c
+            ON c.UUID = sr.UUID
+        WHERE sr.RFC = @Rfc
+          AND sr.IdSucursal = @IdSucursal
+          AND NULLIF(LTRIM(RTRIM(ISNULL(sr.EstatusListado69B,''))), '') IS NOT NULL
+    )
+    SELECT
+        s.Situacion,
+        Conteo = COUNT(r.UUID),
+        TotalCFDI = CAST(ROUND(ISNULL(SUM(r.TotalMXN),0),2) AS DECIMAL(24,2)),
+        Navegacion = (
+            SELECT modulo = 'comprobantes_recibidos',
+                   titulo = CONCAT('Listado 69-B ', s.Situacion),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, s.Situacion AS estatus_listado69b FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        )
+    FROM Situaciones s
+    LEFT JOIN Recibidos69BHistorico r
+        ON r.EstatusListado69B = s.Situacion
+    GROUP BY s.Situacion, s.Orden
+    ORDER BY s.Orden;
+
+    /* ============================================================
+       RS4 - Cancelaciones emitidos/recibidos
+       - MesesAnteriores: FechaCancelacion en periodo, Fecha de emisión anterior al inicio del periodo
+       - MesesPosteriores: Fecha de emisión en periodo, FechaCancelacion posterior al periodo
+       - Pendientes: vigentes con solicitud/código de cancelación pendiente/no cancelable/rechazada
+       ============================================================ */
+
+    CREATE TABLE #Cancelaciones
+    (
+        Origen VARCHAR(20),
+        TipoCancelacion VARCHAR(30),
+        UUID VARCHAR(50),
+        TotalMXN DECIMAL(24,6)
+    );
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Emitidos',
+        'MesesAnteriores',
+        c.UUID,
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        )
+    FROM dbo.SucursalComprobantes sc
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sc.UUID
+    WHERE sc.RFC = @Rfc
+      AND sc.IdSucursal = @IdSucursal
+      AND c.Status = 1
+      AND c.FechaCancelacion >= @InicioPeriodo
+      AND c.FechaCancelacion <  @FinPeriodo
+      AND c.Fecha < @InicioPeriodo;
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Emitidos',
+        'MesesPosteriores',
+        c.UUID,
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        )
+    FROM dbo.SucursalComprobantes sc
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sc.UUID
+    WHERE sc.RFC = @Rfc
+      AND sc.IdSucursal = @IdSucursal
+      AND c.Status = 1
+      AND c.Fecha >= @InicioPeriodo
+      AND c.Fecha <  @FinPeriodo
+      AND c.FechaCancelacion >= @FinPeriodo;
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Emitidos',
+        'Pendientes',
+        e.UUID,
+        e.TotalMXN
+    FROM #EmitidosBase e
+    INNER JOIN #EmitidosPeriodo ep
+        ON ep.UUID = e.UUID
+    WHERE e.Status = 0
+      AND
+      (
+            ISNULL(e.SolicitudCancelacionActiva,0) = 1
+            OR e.IdEstatusCancelacion = 'SOLICITUD RECHAZADA'
+            OR e.IdEstatusCancelacion = 'NO CANCELABLE'
+      );
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Recibidos',
+        'MesesAnteriores',
+        c.UUID,
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        )
+    FROM dbo.SucursalRecepcion sr
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sr.UUID
+    WHERE sr.RFC = @Rfc
+      AND sr.IdSucursal = @IdSucursal
+      AND c.Status = 1
+      AND c.FechaCancelacion >= @InicioPeriodo
+      AND c.FechaCancelacion <  @FinPeriodo
+      AND c.Fecha < @InicioPeriodo;
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Recibidos',
+        'MesesPosteriores',
+        c.UUID,
+        CAST(
+            CASE
+                WHEN ISNULL(c.Moneda,'MXN') = 'MXN' THEN ISNULL(c.Total,0)
+                WHEN ISNULL(c.TipoCambio,0) > 0 THEN ISNULL(c.Total,0) * c.TipoCambio
+                ELSE ISNULL(c.Total,0)
+            END AS DECIMAL(24,6)
+        )
+    FROM dbo.SucursalRecepcion sr
+    INNER JOIN dbo.Comprobantes c
+        ON c.UUID = sr.UUID
+    WHERE sr.RFC = @Rfc
+      AND sr.IdSucursal = @IdSucursal
+      AND c.Status = 1
+      AND c.Fecha >= @InicioPeriodo
+      AND c.Fecha <  @FinPeriodo
+      AND c.FechaCancelacion >= @FinPeriodo;
+
+    INSERT INTO #Cancelaciones
+    SELECT
+        'Recibidos',
+        'Pendientes',
+        r.UUID,
+        r.TotalMXN
+    FROM #RecibidosBase r
+    INNER JOIN #RecibidosPeriodo rp
+        ON rp.UUID = r.UUID
+    WHERE r.Status = 0
+      AND
+      (
+            ISNULL(r.SolicitudCancelacionActiva,0) = 1
+            OR r.IdEstatusCancelacion = 'SOLICITUD RECHAZADA'
+            OR r.IdEstatusCancelacion = 'NO CANCELABLE'
+      );
+
+    ;WITH Origenes AS
+    (
+        SELECT 'Emitidos' AS Origen, 1 AS OrdenOrigen
+        UNION ALL SELECT 'Recibidos', 2
+    ),
+    Tipos AS
+    (
+        SELECT 'MesesAnteriores' AS TipoCancelacion, 1 AS OrdenTipo
+        UNION ALL SELECT 'MesesPosteriores', 2
+        UNION ALL SELECT 'Pendientes', 3
+    )
+    SELECT
+        o.Origen,
+        t.TipoCancelacion,
+        Conteo = COUNT(c.UUID),
+        TotalCFDI = CAST(ROUND(ISNULL(SUM(c.TotalMXN),0),2) AS DECIMAL(24,2)),
+        Navegacion = (
+            SELECT modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                   titulo = CONCAT(o.Origen, ' cancelaciones ', t.TipoCancelacion),
+                   filtros = JSON_QUERY((SELECT @TokenSucursal AS sucursal_token, @Anio AS anio, @Mes AS mes, t.TipoCancelacion AS tipo_cancelacion FOR JSON PATH, WITHOUT_ARRAY_WRAPPER))
+            FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+        )
+    FROM Origenes o
+    CROSS JOIN Tipos t
+    LEFT JOIN #Cancelaciones c
+        ON c.Origen = o.Origen
+       AND c.TipoCancelacion = t.TipoCancelacion
+    GROUP BY o.Origen, o.OrdenOrigen, t.TipoCancelacion, t.OrdenTipo
+    ORDER BY o.OrdenOrigen, t.OrdenTipo;
+
+    /* ============================================================
+       RS5 - CFDI recibidos inválidos del periodo.
+       Fuente directa: SucursalValidacionComprobantes.
+       Se toma la última validación por UUID.
+       No cuenta invalidez por SAT no vigente ni por listado 69-B.
+       ============================================================ */
+
+    ;WITH UltimaValidacion AS
+    (
+        SELECT
+            svc.*,
+            RN = ROW_NUMBER() OVER
+            (
+                PARTITION BY svc.Rfc, svc.IdSucursal, svc.UUID
+                ORDER BY svc.FechaValidacion DESC
+            )
+        FROM dbo.SucursalValidacionComprobantes svc
+        WHERE svc.Rfc = @Rfc
+          AND svc.IdSucursal = @IdSucursal
+          AND svc.FechaEmision >= @InicioPeriodo
+          AND svc.FechaEmision < @FinPeriodo
+    ),
+    Invalidos AS
+    (
+        SELECT *
+        FROM UltimaValidacion
+        WHERE RN = 1
+          AND
+          (
+                ISNULL(Estructura_Valido, 1) = 0
+             OR ISNULL(XSD_Valido, 1) = 0
+             OR ISNULL(Reglas_Valido, 1) = 0
+             OR ISNULL(SelloCfdi_Valido, 1) = 0
+          )
+    )
+    SELECT
+        ConteoInvalidos = COUNT(1),
+        TotalCFDI = CAST(ROUND(ISNULL(SUM(ISNULL(Total,0)),0),2) AS DECIMAL(24,2)),
+        InvalidosEstructura = ISNULL(SUM(CASE WHEN ISNULL(Estructura_Valido, 1) = 0 THEN 1 ELSE 0 END),0),
+        InvalidosXsd = ISNULL(SUM(CASE WHEN ISNULL(XSD_Valido, 1) = 0 THEN 1 ELSE 0 END),0),
+        InvalidosRegla = ISNULL(SUM(CASE WHEN ISNULL(Reglas_Valido, 1) = 0 THEN 1 ELSE 0 END),0),
+        InvalidosSello = ISNULL(SUM(CASE WHEN ISNULL(SelloCfdi_Valido, 1) = 0 THEN 1 ELSE 0 END),0),
+        NavegacionInvalidos = CAST(NULL AS NVARCHAR(MAX))
+    FROM Invalidos;
+
+    /* ============================================================
+       RS6 - Duplicidades emitidos/recibidos
+       Sigue el criterio de pantallas: IdTipoDuplicidad habilitado,
+       toma UUID y UUIDPresunto.
+       ============================================================ */
+
+    CREATE TABLE #Duplicados
+    (
+        Origen VARCHAR(20),
+        UUID VARCHAR(50) NOT NULL,
+        TotalMXN DECIMAL(24,6) NOT NULL,
+        PRIMARY KEY (Origen, UUID)
+    );
+
+    DECLARE @IdTipoDuplicidadEmitidos VARCHAR(30);
+    DECLARE @IdTipoDuplicidadRecibidos VARCHAR(30);
+
+    SELECT @IdTipoDuplicidadEmitidos = sd.IdTipoDuplicidad
+    FROM dbo.SucursalDuplicidades sd
+    WHERE sd.RFC = @Rfc
+      AND sd.IdSucursal = @IdSucursal
+      AND sd.Recepcion = 0
+      AND sd.Habilitada = 1;
+
+    SELECT @IdTipoDuplicidadRecibidos = sd.IdTipoDuplicidad
+    FROM dbo.SucursalDuplicidades sd
+    WHERE sd.RFC = @Rfc
+      AND sd.IdSucursal = @IdSucursal
+      AND sd.Recepcion = 1
+      AND sd.Habilitada = 1;
+
+    IF NULLIF(LTRIM(RTRIM(ISNULL(@IdTipoDuplicidadEmitidos,''))), '') IS NOT NULL
+    BEGIN
+        ;WITH D AS
+        (
+            SELECT d.UUID
+            FROM dbo.SucursalComprobanteDuplicidades d
+            WHERE d.RFC = @Rfc
+              AND d.IdSucursal = @IdSucursal
+              AND d.EsRecepcion = 0
+              AND d.Descarto = 0
+              AND d.IdTipoDuplicidad = @IdTipoDuplicidadEmitidos
+
+            UNION
+
+            SELECT d.UUIDPresunto
+            FROM dbo.SucursalComprobanteDuplicidades d
+            WHERE d.RFC = @Rfc
+              AND d.IdSucursal = @IdSucursal
+              AND d.EsRecepcion = 0
+              AND d.Descarto = 0
+              AND d.IdTipoDuplicidad = @IdTipoDuplicidadEmitidos
+              AND NULLIF(LTRIM(RTRIM(d.UUIDPresunto)), '') IS NOT NULL
+        )
+        INSERT INTO #Duplicados(Origen, UUID, TotalMXN)
+        SELECT DISTINCT
+            'Emitidos',
+            e.UUID,
+            e.TotalMXN
+        FROM D
+        INNER JOIN #EmitidosBase e
+            ON e.UUID = D.UUID
+        INNER JOIN #EmitidosPeriodo ep
+            ON ep.UUID = e.UUID;
+    END;
+
+    IF NULLIF(LTRIM(RTRIM(ISNULL(@IdTipoDuplicidadRecibidos,''))), '') IS NOT NULL
+    BEGIN
+        ;WITH D AS
+        (
+            SELECT d.UUID
+            FROM dbo.SucursalComprobanteDuplicidades d
+            WHERE d.RFC = @Rfc
+              AND d.IdSucursal = @IdSucursal
+              AND d.EsRecepcion = 1
+              AND d.Descarto = 0
+              AND d.IdTipoDuplicidad = @IdTipoDuplicidadRecibidos
+
+            UNION
+
+            SELECT d.UUIDPresunto
+            FROM dbo.SucursalComprobanteDuplicidades d
+            WHERE d.RFC = @Rfc
+              AND d.IdSucursal = @IdSucursal
+              AND d.EsRecepcion = 1
+              AND d.Descarto = 0
+              AND d.IdTipoDuplicidad = @IdTipoDuplicidadRecibidos
+              AND NULLIF(LTRIM(RTRIM(d.UUIDPresunto)), '') IS NOT NULL
+        )
+        INSERT INTO #Duplicados(Origen, UUID, TotalMXN)
+        SELECT DISTINCT
+            'Recibidos',
+            r.UUID,
+            r.TotalMXN
+        FROM D
+        INNER JOIN #RecibidosBase r
+            ON r.UUID = D.UUID
+        INNER JOIN #RecibidosPeriodo rp
+            ON rp.UUID = r.UUID;
+    END;
+
+    ;WITH Origenes AS
+    (
+        SELECT 'Emitidos' AS Origen, 1 AS Orden
+        UNION ALL SELECT 'Recibidos', 2
+    )
+    SELECT
+        o.Origen,
+        ConteoDuplicados = COUNT(d.UUID),
+        TotalCFDI = CAST(ROUND(ISNULL(SUM(d.TotalMXN),0),2) AS DECIMAL(24,2)),
+        NavegacionDuplicados =
+            (
+                SELECT
+                    modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                    titulo = CONCAT(o.Origen, ' duplicados'),
+                    filtros = JSON_QUERY((
+                        SELECT
+                            @TokenSucursal AS sucursal_token,
+                            @Anio AS anio,
+                            @Mes AS mes,
+                            CAST(1 AS BIT) AS duplicidades
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            )
+    FROM Origenes o
+    LEFT JOIN #Duplicados d
+        ON d.Origen = o.Origen
+    GROUP BY o.Origen, o.Orden
+    ORDER BY o.Orden;
+
+    /* ============================================================
+       RS7 - Indicadores operativos
+       - Ingresos PUE forma 99
+       - Ingresos PUE con REP relacionado
+       - Egresos sin CFDI relacionados
+       Emitidos y recibidos.
+       ============================================================ */
+
+    CREATE TABLE #IndicadoresOperativos
+    (
+        Origen VARCHAR(20),
+        Indicador VARCHAR(100),
+        UUID VARCHAR(50),
+        TotalMXN DECIMAL(24,6)
+    );
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Emitidos', 'Ingresos PUE con forma de pago no bancarizada', e.UUID, e.TotalMXN
+    FROM #EmitidosBase e
+    INNER JOIN #EmitidosPeriodo ep ON ep.UUID = e.UUID
+    WHERE e.TipoDeComprobante = 'I'
+      AND e.Status = 0
+      AND e.MetodoPago = 'PUE'
+      AND ISNULL(e.FormaPago,'') NOT IN ('02','03','04','05','06','28','29');
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Emitidos', 'Ingresos PUE con REP relacionado', e.UUID, e.TotalMXN
+    FROM #EmitidosBase e
+    INNER JOIN #EmitidosPeriodo ep ON ep.UUID = e.UUID
+    WHERE e.TipoDeComprobante = 'I'
+      AND e.Status = 0
+      AND e.MetodoPago = 'PUE'
+      AND EXISTS
+      (
+            SELECT 1
+            FROM dbo.PagosDoctoRelacionado dr
+            INNER JOIN dbo.Comprobantes rep
+                ON rep.UUID = dr.UUID
+               AND rep.TipoDeComprobante = 'P'
+               AND rep.Status = 0
+            WHERE dr.IdDocumento = e.UUID
+      );
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Emitidos', 'Egresos sin CFDI relacionados', e.UUID, e.TotalMXN
+    FROM #EmitidosBase e
+    INNER JOIN #EmitidosPeriodo ep ON ep.UUID = e.UUID
+    WHERE e.TipoDeComprobante = 'E'
+      AND e.Status = 0
+      AND NOT EXISTS
+      (
+            SELECT 1
+            FROM dbo.ComprobanteRelaciones cr
+            WHERE cr.UUID = e.UUID
+      );
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Recibidos', 'Ingresos PUE con forma de pago no bancarizada', r.UUID, r.TotalMXN
+    FROM #RecibidosBase r
+    INNER JOIN #RecibidosPeriodo rp ON rp.UUID = r.UUID
+    WHERE r.TipoDeComprobante = 'I'
+      AND r.Status = 0
+      AND r.MetodoPago = 'PUE'
+      AND ISNULL(r.FormaPago,'') NOT IN ('02','03','04','05','06','28','29');
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Recibidos', 'Ingresos PUE con REP relacionado', r.UUID, r.TotalMXN
+    FROM #RecibidosBase r
+    INNER JOIN #RecibidosPeriodo rp ON rp.UUID = r.UUID
+    WHERE r.TipoDeComprobante = 'I'
+      AND r.Status = 0
+      AND r.MetodoPago = 'PUE'
+      AND EXISTS
+      (
+            SELECT 1
+            FROM dbo.PagosDoctoRelacionado dr
+            INNER JOIN dbo.Comprobantes rep
+                ON rep.UUID = dr.UUID
+               AND rep.TipoDeComprobante = 'P'
+               AND rep.Status = 0
+            WHERE dr.IdDocumento = r.UUID
+      );
+
+    INSERT INTO #IndicadoresOperativos
+    SELECT 'Recibidos', 'Egresos sin CFDI relacionados', r.UUID, r.TotalMXN
+    FROM #RecibidosBase r
+    INNER JOIN #RecibidosPeriodo rp ON rp.UUID = r.UUID
+    WHERE r.TipoDeComprobante = 'E'
+      AND r.Status = 0
+      AND NOT EXISTS
+      (
+            SELECT 1
+            FROM dbo.ComprobanteRelaciones cr
+            WHERE cr.UUID = r.UUID
+      );
+
+    ;WITH Origenes AS
+    (
+        SELECT 'Emitidos' AS Origen, 1 AS OrdenOrigen
+        UNION ALL SELECT 'Recibidos', 2
+    ),
+    Indicadores AS
+    (
+        SELECT 'Ingresos PUE con forma de pago no bancarizada' AS Indicador, 1 AS OrdenIndicador,
+               'forma_pago_no_bancarizada' AS FiltroEspecial
+        UNION ALL SELECT 'Ingresos PUE con REP relacionado', 2, 'pue_con_rep_relacionado'
+        UNION ALL SELECT 'Egresos sin CFDI relacionados', 3, 'egresos_sin_relacion'
+    )
+    SELECT
+        o.Origen,
+        i.Indicador,
+        Conteo = COUNT(io.UUID),
+        TotalCFDI = CAST(ROUND(ISNULL(SUM(io.TotalMXN),0),2) AS DECIMAL(24,2)),
+        Navegacion =
+            (
+                SELECT
+                    modulo = CASE WHEN o.Origen = 'Emitidos' THEN 'comprobantes_emitidos' ELSE 'comprobantes_recibidos' END,
+                    titulo = CONCAT(o.Origen, ' - ', i.Indicador),
+                    filtros = JSON_QUERY((
+                        SELECT
+                            @TokenSucursal AS sucursal_token,
+                            @Anio AS anio,
+                            @Mes AS mes,
+                            CASE WHEN i.Indicador = 'Egresos sin CFDI relacionados' THEN 'E' ELSE 'I' END AS tipo_comprobante,
+                            0 AS status,
+                            CASE WHEN i.Indicador LIKE 'Ingresos PUE%' THEN 'PUE' ELSE NULL END AS metodo_pago,
+                            CASE WHEN i.Indicador = 'Ingresos PUE con forma de pago no bancarizada' THEN '02,03,04,05,06,28,29' ELSE NULL END AS forma_pago_excluir,
+                            CASE WHEN i.Indicador = 'Ingresos PUE con forma de pago no bancarizada' THEN CAST(1 AS BIT) ELSE NULL END AS forma_pago_no_bancarizada,
+                            CASE WHEN i.Indicador = 'Egresos sin CFDI relacionados' THEN CAST(0 AS BIT) ELSE NULL END AS tiene_relacionados,
+                            i.FiltroEspecial AS filtro_especial
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            )
+    FROM Origenes o
+    CROSS JOIN Indicadores i
+    LEFT JOIN #IndicadoresOperativos io
+        ON io.Origen = o.Origen
+       AND io.Indicador = i.Indicador
+    GROUP BY o.Origen, o.OrdenOrigen, i.Indicador, i.OrdenIndicador, i.FiltroEspecial
+    ORDER BY o.OrdenOrigen, i.OrdenIndicador;
+
+    /* ============================================================
+       RS8 - Navegación principal del reporte de control fiscal.
+       Este enlace sirve para correo/PDF/dashboard resumen.
+       ============================================================ */
+    SELECT
+        NavegacionPrincipal =
+            (
+                SELECT
+                    modulo = 'control_fiscal',
+                    titulo = 'Reporte de control fiscal',
+                    filtros = JSON_QUERY((
+                        SELECT
+                            @TokenSucursal AS sucursal_token,
+                            @Anio AS anio,
+                            @Mes AS mes
+                        FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+                    ))
+                FOR JSON PATH, WITHOUT_ARRAY_WRAPPER
+            );
+
+    IF @Diagnostico = 1
+    BEGIN
+        SET @DiagNow = SYSDATETIME();
+        SET @DiagTotalMs = DATEDIFF(MILLISECOND, @DiagStart, @DiagNow);
+        RAISERROR('[ReporteControlFiscalV4] Fin | TotalMs=%d', 0, 1, @DiagTotalMs) WITH NOWAIT;
+    END;
+END

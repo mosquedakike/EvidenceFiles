@@ -1,0 +1,173 @@
+# TARJETA ASANA — PROPUESTA (BORRADOR PARA REVISIÓN)
+
+**Título:** JSON de nómina — Enriquecer consulta de CFDI con desglose del complemento de Nómina (análogo al complemento de Pagos)
+
+---
+
+- **Tarea Asana original:** https://app.asana.com/1/1113198542081588/project/1204994788487423/task/1215931631358944
+- **Proyecto:** LinkCFDI · **Sección:** Backlog
+- **Definición técnica preparada por:** Enrique Hernández
+- **Delegada por:** Andrés Gutiérrez
+
+> **NOTA:** Este documento es el contenido **PROPUESTO** para la tarjeta. **NO** se ha modificado la tarjeta en Asana. Primero revisar y validar este borrador.
+
+---
+
+## Campos sugeridos de la tarjeta (a confirmar con dirección)
+
+| Campo | Valor sugerido |
+|---|---|
+| **Tipo** | Nueva funcionalidad |
+| **Estatus** | Definida (una vez resueltas las decisiones de la sección 7) |
+| **Prioridad** | Media (ajustar según roadmap — decisión de dirección) |
+| **Dificultad** | XL (+8 hrs, dividir en las subtareas de la sección 6) — el desglose cubre la estructura completa del complemento, no un subconjunto. |
+| **Proyecto** | Link |
+
+---
+
+## 1. Objetivo / Contexto
+
+Hoy, al consultar un CFDI con complemento de Pago, la respuesta ya incluye un bloque `pago` con el desglose completo de ese complemento. Se busca lo mismo para el complemento de **Nómina**: que la consulta de un CFDI de nómina devuelva un bloque `nomina` igual de completo, fiel al XSD del SAT (versión 1.2), y que ese desglose también sea visible en el portal web.
+
+> **Referencia funcional:** ver comentario de Andrés Gutiérrez en la tarjeta (ejemplo del JSON de consulta de un comprobante con complemento de pago).
+
+---
+
+## 2. Requerimiento funcional
+
+1. `GET api/v{version}/emision/{token}` (y su análogo `GET api/v{version}/recepcion/{token}`) debe devolver un objeto `nomina` cuando el comprobante tenga complemento de nómina.
+2. `nomina` refleja la estructura completa del complemento 1.2 del SAT —cabecera, emisor, receptor, percepciones, deducciones, otros pagos e incapacidades, con sus nodos opcionales— con el mismo nivel de detalle que ya tiene `pago` para el complemento de Pagos.
+3. Si el comprobante no es de nómina, `nomina` va en `null`; los nodos opcionales del XSD que el CFDI no traiga se omiten vía `_specified`, igual que ya pasa con `pago` (convenciones en sección 5).
+4. El portal debe mostrar ese desglose en una pestaña "Desglose nómina", análoga a "Desglose pago".
+
+---
+
+## 3. Estado actual (lo que ya existe)
+
+### Persistencia (`LinkCFDI.Datos`)
+
+- Tablas/entidades EF de nómina en `LinkCFDI.Datos\Model\`, ya con la misma granularidad del XSD:
+  `Nomina`, `NominaEmisor`, `NominaEmisorEntidadSNCF`, `NominaReceptor`, `NominaSubContratacion`, `NominaPercepciones`, `NominaPercepcion`, `NominaAccionesOTitulos`, `NominaHorasExtra`, `NominaJubilacionPensionRetiro`, `NominaSeparacionIndemnizacion`, `NominaDeducciones`, `NominaDeduccion`, `NominaOtrosPagos`, `NominaSubsidioAlEmpleo`, `NominaCompensacionSaldosAFavor`, `NominaIncapacidades`.
+- DbSets registrados en `LinkContext` (líneas ~560-577).
+- Relaciones configuradas por Fluent API (`LinkContext` ~10716+), con PK compuesta (IdNomina, UUID) y navegaciones internas (`Nomina` → Emisor/Receptor/Percepciones/Deducciones/OtrosPagos/Incapacidades; `NominaPercepciones` → Percepciones[], JubilacionPensionRetiro, SeparacionIndemnizacion; etc.).
+- Helpers de datos: `LinkCFDI.Datos\Entidades\Nomina\*Datos(Helper/DbFactory)`.
+- Clases de serialización del complemento (reflejo 1:1 del XSD del SAT, usar como referencia de atributos/tipos): `LinkCFDI.CFDI\Serializacion\Complementos\Nomina12\*.cs`.
+
+### Negocio / DTOs entidad
+
+- `LinkCFDI.Negocios\Entidades\Nomina\*Negocio.cs`
+- `LinkCFDI.Comun\DTOs\Entidades\Nomina\*Dto.cs`
+
+### Mapeo
+
+- `LinkCFDI.Mapping\CFDI\CFDINominaMapperProfile.cs` (mapeos de serialización CFDI ↔ DTO de nómina).
+
+### Patrón de referencia (Pagos) — usar como plantilla
+
+- **DTO API:** `LinkCFDI.Comun\DTOs\API\Comprobante\Pagos\` (`Pagos.cs`, `Pago.cs`, `DocumentoRelacionado.cs`)
+- **Armado:** `LinkCFDI.Negocios\Entidades\Comprobantes\ComprobanteNegocio.cs` método `MapeaComprobanteDtoAComprobanteAPI` (líneas ~462-624)
+- **Carga BD:** `LinkCFDI.Datos\Entidades\Comprobantes\ComprobanteDatosHelper.cs` includes de Pagos (líneas ~193-203 y ~1448-1458)
+- **DTO:** `LinkCFDI.Comun\DTOs\API\Comprobante\Comprobante.cs` propiedad `pago` + `pago_specified` (líneas ~288-295)
+- **Front:** `LinkCFDI.Web\Views\Comprobantes\_DetalleComprobante.cshtml` tab "Desglose pago" (cond. `comprobante.pago != null`)
+
+---
+
+## 4. Pendientes (lo que falta — núcleo del trabajo)
+
+### Pendiente 1 — Relacionar `Comprobante` con `Nomina`
+
+El modelo `Comprobante` no tiene navegación a `Nomina` (a diferencia de Pagos, que sí la tiene y por eso se carga con un simple `.Include`). Hay que agregarla replicando el mismo patrón 1—1 ya usado en `PagosTotale` (vía `Uuid`):
+
+1. Navegación `Comprobante` ↔ `Nomina` en el modelo EF (`Model\Comprobante.cs` y `Model\Nomina.cs`).
+2. Fluent API en `LinkContext.cs`, igual al bloque de `PagosTotale` (líneas ~6741-6744): `entity.HasOne(d => d.Uu).WithOne(p => p.Nomina).HasForeignKey<Nomina>(d => d.Uuid)...`
+3. Incluir el grafo completo en `ComprobanteDatosHelper` (Emisor→EntidadSNCF, Receptor→SubContratacion, Percepciones→Percepcion(→HorasExtra, →AccionesOTitulos)/JubilacionPensionRetiro/SeparacionIndemnizacion, Deducciones→Deduccion, OtrosPagos→SubsidioAlEmpleo/CompensacionSaldosAFavor, Incapacidades), igual que se incluye `Pagos`/`PagosTotale`.
+4. Poblar `ComprobanteDto.Nomina` desde ese grafo.
+
+> Cambio de modelo vía EF Core Migration, conforme al flujo estándar de `LinkCFDI.Datos\Docs\README.md`.
+
+### Pendiente 2 — Completar los DTOs de entidad de nómina
+
+`NominaPercepcionesDto` y `NominaDeduccionesDto` hoy solo traen totales; les faltan las colecciones de detalle (`Percepciones[]`, `Deducciones[]`) y los nodos `JubilacionPensionRetiro` / `SeparacionIndemnizacion` / `HorasExtra[]` / `AccionesOTitulos`, que ya existen en el modelo EF y en el XSD. Hay que enriquecerlos (o mapear directo desde el modelo en el armado) para cubrir todo el complemento.
+
+### Pendiente 3 — Crear el DTO de respuesta API de nómina
+
+Falta `LinkCFDI.Comun\DTOs\API\Comprobante\Nomina\` con una clase por nodo del XSD (snake_case, JsonPropertyName, ConditionalPropertyConverter, XML docs), análogo a la carpeta `Pagos\`.
+
+### Pendiente 4 — Agregar el desglose en el front
+
+No existe la pestaña "Desglose nómina" en las vistas de detalle (Comprobantes, Recepciones, Portal).
+
+> Confirmado con Andrés: sí se requiere el tab. Sugiere evaluar reacomodar la estructura de tabs actual antes de agregar uno más —que la información propia del CFDI quede en tabs y el resto pase a opciones de menú— para no terminar con un exceso de pestañas saturadas.
+
+---
+
+## 5. Convenciones obligatorias (DTOs de Integradores / API pública)
+
+- `snake_case` con `[JsonPropertyName("...")]` en **TODAS** las propiedades.
+- `token` y `objeto` primero (si aplica); resto en orden alfabético.
+- Sin acentos en valores de `JsonPropertyName`.
+- Sin exponer propiedades privadas (`IdNomina`, `IdSucursal`, `FechaModificacion`, llaves internas, etc.).
+- XML doc `<summary>` + `<example>` en cada propiedad.
+- `[JsonConverter(typeof(ConditionalPropertyConverter<T>))]` + flags `*_specified` en cada nodo/atributo opcional del XSD (p. ej. `entidad_sncf_specified`, `acciones_o_titulos_specified`, `jubilacion_pension_retiro_specified`), replicando el patrón de Pagos/Comprobante para que las propiedades no aplicables no rompan el contrato.
+- Importes: usar `[ValidarAtributoImporte]` donde corresponda (igual que en `Pagos.cs` / `Pago.cs`).
+- Fechas: en la capa de negocio/armado, **NUNCA** `DateTime.Now`/`UtcNow`/`GETDATE()`; usar `Fechas.ObtenerHoraLocal()` (`LinkCFDI.Comun.Utilerias`) si se requiere hora actual.
+- Multi-tenant: respetar filtros de empresa/sucursal al cargar la nómina (no exponer datos de otra sucursal); validar tenant en la consulta.
+
+---
+
+## 6. Subtareas ejecutables (división propuesta)
+
+Cada subtarea es una unidad de PR independiente: tiene un entregable concreto y un criterio de revisión propio, sin depender de que las demás estén terminadas para poder evaluarse.
+
+- **[ST-1] Relación `Comprobante` ↔ `Nomina` (esquema)**
+  *Entregable:* navegación EF + Fluent API + migration aplicada en BD local (Pendiente 1).
+  *Revisión:* `Up()`/`Down()` correctos, no rompe el esquema ni los DbSets existentes.
+
+- **[ST-2] Carga completa de la nómina**
+  *Entregable:* `Include`/`ThenInclude` del grafo completo en `ComprobanteDatosHelper` + DTOs de entidad enriquecidos con sus nodos de detalle (Pendiente 2), respetando tenant.
+  *Revisión:* un CFDI de nómina real carga todas sus secciones (incluidos los nodos opcionales) sin N+1 evidente.
+
+- **[ST-3] Contrato y armado del bloque `nomina`**
+  *Entregable:* DTOs de respuesta en `DTOs\API\Comprobante\Nomina\` + construcción de `comprobante.nomina` en `ComprobanteNegocio.MapeaComprobanteDtoAComprobanteAPI`, con sus `_specified`.
+  *Revisión:* contra un CFDI de nómina real y uno sin nómina, el JSON refleja la estructura completa del complemento 1.2 (sección 2) y `nomina = null` cuando no aplica.
+
+- **[ST-4] Documentación Swagger (Integradores)**
+  *Entregable:* XML docs + ejemplo de respuesta visible en Swagger UI.
+  *Revisión:* spec generada sin advertencias y consistente con el resto de endpoints de Integradores.
+
+- **[ST-5] Desglose nómina en el portal**
+  *Entregable:* pestaña "Desglose nómina" en las vistas aprobadas (Decisión A), visible solo cuando exista el bloque. Incluye valorar con diseño/Andrés si conviene reacomodar la estructura de tabs actual para no saturarla (ver Pendiente 4).
+  *Revisión:* probar en navegador contra un comprobante real, sin afectar la pestaña existente de "Desglose pago".
+
+- **[ST-6] Evidencia de no regresión**
+  *Entregable:* comparación de payloads de comprobantes de Pago e Ingreso antes/después del cambio.
+  *Revisión:* los contratos existentes no cambian para comprobantes que no son de nómina.
+
+---
+
+## 7. Decisiones pendientes (escalar a dirección antes de iniciar)
+
+- **Decisión A — Alcance de front:**
+  Andrés ya confirmó que sí se requiere el tab de desglose. Falta definir: ¿aplica a Comprobantes (emisión), Recepciones y Portal, o solo a un subconjunto en esta fase? ¿Se reacomoda la estructura de tabs actual (info del CFDI en tabs, resto en menú) para no saturarla?
+
+- **Decisión B — Versiones de nómina:**
+  El modelo asume Versión 1.2. ¿Se da soporte también a 1.1 (`LinkCFDI.CFDI\...\Nomina11`, que no tiene `EntidadSNCF`, `AccionesOTitulos` ni `SubContratacion`) o solo 1.2? (Sin hardcodear versión.)
+
+- **Decisión C —** ¿El cambio aplica también a la API de Usuarios/Web además de Integradores, o solo a uno de los contratos?
+
+---
+
+## 8. Criterios de aceptación
+
+- [ ] La consulta de un CFDI de nómina devuelve el bloque `nomina` con la estructura completa del XSD 1.2 (cabecera, emisor, receptor, percepciones, deducciones, otros pagos, incapacidades, y todos sus nodos opcionales cuando el CFDI los trae).
+- [ ] Un CFDI que no es de nómina devuelve `nomina = null` sin alterar el resto del payload (incluido `pago`).
+- [ ] Los nodos opcionales del XSD (EntidadSNCF, SubContratacion, HorasExtra, AccionesOTitulos, JubilacionPensionRetiro, SeparacionIndemnizacion, SubsidioAlEmpleo, CompensacionSaldosAFavor) se omiten correctamente vía `_specified` cuando el CFDI no los trae.
+- [ ] Los nombres de propiedades cumplen snake_case + JsonPropertyName sin acentos y sin exponer campos internos; XML docs presentes.
+- [ ] El portal muestra la pestaña "Desglose nómina" solo cuando aplica, en las vistas aprobadas (Decisión A).
+- [ ] No hay regresión en la consulta de comprobantes de pago e ingreso.
+- [ ] Filtros multi-tenant respetados.
+- [ ] Evidencia de pruebas adjunta (primer filtro de Enrique).
+
+---
+
+> **FIN DEL BORRADOR** — Revisar decisiones de la sección 7 antes de actualizar la tarjeta de Asana y asignarla a desarrollo.

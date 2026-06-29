@@ -1,0 +1,168 @@
+{
+  "navegacion_principal": "/ReporteControlFiscal?anio=2026&mes=4",
+  "ppd_emitidos": {
+    "total_ppd": 11,
+    "total_ppd_importe": 509520.53,
+    "liquidadas": 3,
+    "liquidadas_importe": 308190.62,
+    "pendientes": 8,
+    "pendientes_importe": 201329.91,
+    "sobrepagadas": 0,
+    "sobrepagadas_importe": 0.0,
+    "navegacion_total_ppd": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD",
+    "navegacion_liquidadas": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=liquidado",
+    "navegacion_pendientes": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=pendiente",
+    "navegacion_sobrepagadas": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=sobrepagado"
+  },
+  "ppd_recibidos": {
+    "total_ppd": 10,
+    "total_ppd_importe": 383566.12,
+    "liquidadas": 7,
+    "liquidadas_importe": 347091.53,
+    "pendientes": 3,
+    "pendientes_importe": 36474.59,
+    "sobrepagadas": 0,
+    "sobrepagadas_importe": 0.0,
+    "navegacion_total_ppd": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD",
+    "navegacion_liquidadas": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=liquidado",
+    "navegacion_pendientes": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=pendiente",
+    "navegacion_sobrepagadas": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PPD&estatus_pago_cfdi=sobrepagado"
+  },
+  "lista_69b": [
+    {
+      "situacion": "Presunto",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?estatus_listado69b=Presunto"
+    },
+    {
+      "situacion": "Definitivo",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?estatus_listado69b=Definitivo"
+    },
+    {
+      "situacion": "Desvirtuado",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?estatus_listado69b=Desvirtuado"
+    },
+    {
+      "situacion": "Sentencia Favorable",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?estatus_listado69b=Sentencia+Favorable"
+    }
+  ],
+  "cancelaciones": [
+    {
+      "origen": "Emitidos",
+      "tipo_cancelacion": "MesesAnteriores",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_cancelacion=MesesAnteriores"
+    },
+    {
+      "origen": "Emitidos",
+      "tipo_cancelacion": "MesesPosteriores",
+      "conteo": 20,
+      "total_cfdi": 240.19,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_cancelacion=MesesPosteriores"
+    },
+    {
+      "origen": "Emitidos",
+      "tipo_cancelacion": "Pendientes",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_cancelacion=Pendientes"
+    },
+    {
+      "origen": "Recibidos",
+      "tipo_cancelacion": "MesesAnteriores",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_cancelacion=MesesAnteriores"
+    },
+    {
+      "origen": "Recibidos",
+      "tipo_cancelacion": "MesesPosteriores",
+      "conteo": 19,
+      "total_cfdi": 0.19,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_cancelacion=MesesPosteriores"
+    },
+    {
+      "origen": "Recibidos",
+      "tipo_cancelacion": "Pendientes",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_cancelacion=Pendientes"
+    }
+  ],
+  "invalidos": {
+    "conteo_invalidos": 0,
+    "total_cfdi": 0.0,
+    "invalidos_estructura": 0,
+    "invalidos_xsd": 0,
+    "invalidos_regla": 0,
+    "invalidos_sello": 0,
+    "navegacion_invalidos": null
+  },
+  "duplicidades": [
+    {
+      "origen": "Emitidos",
+      "conteo_duplicados": 0,
+      "total_cfdi": 0.0,
+      "navegacion_duplicados": "/Comprobantes?anio=2026&mes=4&duplicidades=true"
+    },
+    {
+      "origen": "Recibidos",
+      "conteo_duplicados": 0,
+      "total_cfdi": 0.0,
+      "navegacion_duplicados": "/Recepciones?anio=2026&mes=4&duplicidades=true"
+    }
+  ],
+  "indicadores": [
+    {
+      "origen": "Emitidos",
+      "indicador": "Ingresos PUE con forma de pago no bancarizada",
+      "conteo": 120,
+      "total_cfdi": 52698.5,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PUE&forma_pago_excluir=02%2c03%2c04%2c05%2c06%2c28%2c29&forma_pago_no_bancarizada=true&filtro_especial=forma_pago_no_bancarizada"
+    },
+    {
+      "origen": "Emitidos",
+      "indicador": "Ingresos PUE con REP relacionado",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PUE&filtro_especial=pue_con_rep_relacionado"
+    },
+    {
+      "origen": "Emitidos",
+      "indicador": "Egresos sin CFDI relacionados",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Comprobantes?anio=2026&mes=4&tipo_comprobante=E&status=0&tiene_relacionados=false&filtro_especial=egresos_sin_relacion"
+    },
+    {
+      "origen": "Recibidos",
+      "indicador": "Ingresos PUE con forma de pago no bancarizada",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PUE&forma_pago_excluir=02%2c03%2c04%2c05%2c06%2c28%2c29&forma_pago_no_bancarizada=true&filtro_especial=forma_pago_no_bancarizada"
+    },
+    {
+      "origen": "Recibidos",
+      "indicador": "Ingresos PUE con REP relacionado",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_comprobante=I&status=0&metodo_pago=PUE&filtro_especial=pue_con_rep_relacionado"
+    },
+    {
+      "origen": "Recibidos",
+      "indicador": "Egresos sin CFDI relacionados",
+      "conteo": 0,
+      "total_cfdi": 0.0,
+      "navegacion": "/Recepciones?anio=2026&mes=4&tipo_comprobante=E&status=0&tiene_relacionados=false&filtro_especial=egresos_sin_relacion"
+    }
+  ]
+}

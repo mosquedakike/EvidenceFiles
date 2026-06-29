@@ -1,0 +1,52 @@
+Remover título y breadcrumb (Control Fiscal - Dashboard > Control Fiscal
+
+Remover etiqueta "Periodo" del control de selección de periodos
+
+El selector de fechas debe estar en modo (solo permitir selección de meses), si le pico a un año por ej, 2025 hace postback y parece que seleccioné el año pero por lo que veo me trajo Diciembre 2025 (supongo la primer selección disponible) pero el control solo muestra "2025" no 2025 - Diciembre, el comportamiento debería ser más como clic al 2025 no hace nada mas que expandir para que el usuario seleccione un mes no postback (revisar con Moi)
+
+Homologar el ancho del selector de fechas con el dashboard de contador creo que es la mitad de columnas no 100%
+
+Remover etiquetas de RFC - Periodo
+
+Quitar subtitulos y colocar descripciones dentro de tooltip de información (ej. mi cuenta) (Aplica para todos los cards con subtitles)
+
+Textos (INGRESOS, GASTOS...) normales no secondary, aplica para todo
+
+Remover texto "Acumulado" solo dejar el importe
+
+Homologar con reporte (gastos rojo, egresos naranja, nominas morado, utilidad fiscal neutro, son los colores del logo de Bily)
+
+Homologar espacio entre cards (RESUMEN EJECUTIVO, FACTURAS A CRÉDITO...) con los espacios del dashboard Default o Contador
+
+Homologar espacio entre TITULO, CONTADOR e IMPORTE en todas las aplicables (explicación Andrés)
+
+Separar PPDs emitidas y recibidas en 2 cards individuales (FACTURAS A CRÉDITO EMITIDAS y FACTURAS A CRÉDITO RECIBIDAS)
+
+La gráfica de dona la siento muy grande, se me ocurre meterla en el sub-card de TOTAL si es posible hacerla pequeñita y que reemplace el contenido (explicación Andrés) ocultar legends
+
+Pendientes es el rojo y sobrepagadas el naranja (colores Bily)
+
+La logia del reporte cuando el indicador/contador es 0 (cero) muestra en color verde, parece que haces lo mismo solo sería confirmar, de lo contrario color rojo
+
+"Cancelados en el mes / emitidos en meses anteriores" y demás columnas probar con color principal (negro) no secondary, también para "Ingresos PUE con forma de pago no bancarizada" y demás...
+
+Separar riesgos y validaciones en cards propias, listado 69b mitad de columnas, cfdi invalidos 3/4 y duplicidades 1/4 de la pantalla tal vez?
+
+Margen bottom de ultimo card homologar
+
+Los enlaces para ver el detalle de preferencia que sea el propio dato el que redirecciona o el card completo y no un link aparte (explicación Andrés)
+
+TODAS LAS OBSERVACIONES ANTERIOES YA QUEDARON MARCADAS COMO COPLETADAS POR ANDRES A EXECPCION DE LA SIUGIENTE Y SE AGREGARON NUEVAS OBSERVACIONES:
+
+La logia del reporte cuando el indicador/contador es 0 (cero) muestra en color verde, parece que haces lo mismo solo sería confirmar, de lo contrario color rojo
+
+Modificar texto de Listas Negras.- "Histórico completo de proveedores identificados en la lista 69-B del SAT"
+
+Modificar texto  de Duplicidades.- "Comprobantes posiblemente duplicados de acuerdo al criterio configurado"
+
+Homologar tamaños de letra y márgenes (tamaño del contador en FACTURAS PPD, márgenes en contador TOTAL CFDI INVÁLIDOS
+
+Cada dato tiene su enlace de navegación, incluso los que tienen contador = 0 (a excepción de Utilidad, totales ppd) agregar <a> a todos los aplicables
+
+El efecto hover de un card podría homologarse con el color del hover que tenemos en los grids
+

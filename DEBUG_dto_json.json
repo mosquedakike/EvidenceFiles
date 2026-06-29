@@ -1,0 +1,186 @@
+{
+  "Rfc": "PFE140312IW8",
+  "RazonSocial": null,
+  "Mes": 4,
+  "Anio": 2026,
+  "Periodo": {
+    "Ingresos": 1078233.46,
+    "Gastos": 660871.15,
+    "Egresos": 0.0,
+    "Nominas": 169966.0,
+    "Utilidad": 247396.31
+  },
+  "Acumulado": {
+    "Ingresos": 7275456.75,
+    "Gastos": 4136100.87,
+    "Egresos": 8922.41,
+    "Nominas": 1227124.61,
+    "Utilidad": 1903308.86
+  },
+  "PpdEmitidos": {
+    "TotalPpd": 11,
+    "TotalPpdImporte": 509520.53,
+    "Liquidadas": 3,
+    "LiquidadasImporte": 308190.62,
+    "Pendientes": 8,
+    "PendientesImporte": 201329.91,
+    "Sobrepagadas": 0,
+    "SobrepagadasImporte": 0.0,
+    "NavegacionTotalPpd": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos PPD total\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\"}}",
+    "NavegacionLiquidadas": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos PPD liquidadas\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"liquidado\"}}",
+    "NavegacionPendientes": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos PPD pendientes\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"pendiente\"}}",
+    "NavegacionSobrepagadas": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos PPD sobrepagadas\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"sobrepagado\"}}"
+  },
+  "PpdRecibidos": {
+    "TotalPpd": 10,
+    "TotalPpdImporte": 383566.12,
+    "Liquidadas": 7,
+    "LiquidadasImporte": 347091.53,
+    "Pendientes": 3,
+    "PendientesImporte": 36474.59,
+    "Sobrepagadas": 0,
+    "SobrepagadasImporte": 0.0,
+    "NavegacionTotalPpd": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos PPD total\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\"}}",
+    "NavegacionLiquidadas": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos PPD liquidadas\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"liquidado\"}}",
+    "NavegacionPendientes": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos PPD pendientes\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"pendiente\"}}",
+    "NavegacionSobrepagadas": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos PPD sobrepagadas\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PPD\",\"estatus_pago_cfdi\":\"sobrepagado\"}}"
+  },
+  "Lista69B": [
+    {
+      "Situacion": "Presunto",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Listado 69-B Presunto\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"estatus_listado69b\":\"Presunto\"}}"
+    },
+    {
+      "Situacion": "Definitivo",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Listado 69-B Definitivo\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"estatus_listado69b\":\"Definitivo\"}}"
+    },
+    {
+      "Situacion": "Desvirtuado",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Listado 69-B Desvirtuado\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"estatus_listado69b\":\"Desvirtuado\"}}"
+    },
+    {
+      "Situacion": "Sentencia Favorable",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Listado 69-B Sentencia Favorable\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"estatus_listado69b\":\"Sentencia Favorable\"}}"
+    }
+  ],
+  "Cancelaciones": [
+    {
+      "Origen": "Emitidos",
+      "TipoCancelacion": "MesesAnteriores",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos cancelaciones MesesAnteriores\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"MesesAnteriores\"}}"
+    },
+    {
+      "Origen": "Emitidos",
+      "TipoCancelacion": "MesesPosteriores",
+      "Conteo": 20,
+      "TotalCfdi": 240.19,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos cancelaciones MesesPosteriores\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"MesesPosteriores\"}}"
+    },
+    {
+      "Origen": "Emitidos",
+      "TipoCancelacion": "Pendientes",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos cancelaciones Pendientes\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"Pendientes\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "TipoCancelacion": "MesesAnteriores",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos cancelaciones MesesAnteriores\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"MesesAnteriores\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "TipoCancelacion": "MesesPosteriores",
+      "Conteo": 19,
+      "TotalCfdi": 0.19,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos cancelaciones MesesPosteriores\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"MesesPosteriores\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "TipoCancelacion": "Pendientes",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos cancelaciones Pendientes\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_cancelacion\":\"Pendientes\"}}"
+    }
+  ],
+  "Invalidos": {
+    "ConteoInvalidos": 0,
+    "TotalCfdi": 0.0,
+    "InvalidosEstructura": 0,
+    "InvalidosXsd": 0,
+    "InvalidosRegla": 0,
+    "InvalidosSello": 0,
+    "NavegacionInvalidos": null
+  },
+  "Duplicidades": [
+    {
+      "Origen": "Emitidos",
+      "ConteoDuplicados": 0,
+      "TotalCfdi": 0.0,
+      "NavegacionDuplicados": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos duplicados\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"duplicidades\":true}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "ConteoDuplicados": 0,
+      "TotalCfdi": 0.0,
+      "NavegacionDuplicados": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos duplicados\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"duplicidades\":true}}"
+    }
+  ],
+  "Indicadores": [
+    {
+      "Origen": "Emitidos",
+      "Indicador": "Ingresos PUE con forma de pago no bancarizada",
+      "Conteo": 120,
+      "TotalCfdi": 52698.5,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos - Ingresos PUE con forma de pago no bancarizada\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PUE\",\"forma_pago_excluir\":\"02,03,04,05,06,28,29\",\"forma_pago_no_bancarizada\":true,\"filtro_especial\":\"forma_pago_no_bancarizada\"}}"
+    },
+    {
+      "Origen": "Emitidos",
+      "Indicador": "Ingresos PUE con REP relacionado",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos - Ingresos PUE con REP relacionado\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PUE\",\"filtro_especial\":\"pue_con_rep_relacionado\"}}"
+    },
+    {
+      "Origen": "Emitidos",
+      "Indicador": "Egresos sin CFDI relacionados",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_emitidos\",\"titulo\":\"Emitidos - Egresos sin CFDI relacionados\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"E\",\"status\":0,\"tiene_relacionados\":false,\"filtro_especial\":\"egresos_sin_relacion\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "Indicador": "Ingresos PUE con forma de pago no bancarizada",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos - Ingresos PUE con forma de pago no bancarizada\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PUE\",\"forma_pago_excluir\":\"02,03,04,05,06,28,29\",\"forma_pago_no_bancarizada\":true,\"filtro_especial\":\"forma_pago_no_bancarizada\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "Indicador": "Ingresos PUE con REP relacionado",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos - Ingresos PUE con REP relacionado\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"I\",\"status\":0,\"metodo_pago\":\"PUE\",\"filtro_especial\":\"pue_con_rep_relacionado\"}}"
+    },
+    {
+      "Origen": "Recibidos",
+      "Indicador": "Egresos sin CFDI relacionados",
+      "Conteo": 0,
+      "TotalCfdi": 0.0,
+      "Navegacion": "{\"modulo\":\"comprobantes_recibidos\",\"titulo\":\"Recibidos - Egresos sin CFDI relacionados\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4,\"tipo_comprobante\":\"E\",\"status\":0,\"tiene_relacionados\":false,\"filtro_especial\":\"egresos_sin_relacion\"}}"
+    }
+  ],
+  "NavegacionPrincipal": "{\"modulo\":\"control_fiscal\",\"titulo\":\"Reporte de control fiscal\",\"filtros\":{\"sucursal_token\":\"suc_JBVABGLU2k27kqhrEekIpTwUex\",\"anio\":2026,\"mes\":4}}"
+}

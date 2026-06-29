@@ -1,0 +1,102 @@
+Reporte de control fiscal Bily
+
+Se pretende contar con un modulo de control fiscal que permita al usuario consultar de forma general la información fiscal relevante que Bily consolida, este modulo se compone de:
+
+Un dashboard de control fiscal que permite la consulta de los datos por periodo (mes)
+Un reporte automático mensual (pdf) que se entrega por correo a los usuarios por cada empresa activa y registrada en Bily
+
+Base de datos
+Tabla.- EmpresaReporteFiscal (lleva un control de los reportes generados y enviados a usuarios por empresa)
+
+RFC
+Mes
+Anio
+Generado
+Error
+MensajeError
+FechaModificacion
+
+
+Front
+Dashboard de control fiscal
+
+Selector de periodo(mes) o ejercicio (año).- Se trata de un control que permita la selección de un mes o año en particular, deberá cargar el año en curso y sus meses cumplidos, además deberá mostrar los 5 años anteriores y sus meses, la selección por default deberá ser el mes en curso, la selección de un mes o ejercicio en este control gobierna la información que se desplegará en todo el dashboard.
+
+Una vez seleccionado un periodo se mostrará la siguiente información (Pendiente mock de result sets, Andrés trabajará en los stored reales de forma paralela)
+
+
+***************************************************
+Título: Resumen fiscal del periodo
+
++ Card con ingresos, muestra la sumatoria de los ingresos del periodo
+- Card con egresos, muestra la sumatoria de los egresos del periodo
+- Card con gastos, muestra la sumatoria de gastos del periodo
+- Card con nomina, muestra la sumatoria de los costos de nomina del periodo
+= Card con utilidad estimada del periodo y su % (ingresos - gastos - egresos - nomina) será correcto esto?
+
+***************************************************
+Título: Conciliación de facturas y recibos de pago
+
+Card con contador de facturas PPD con saldo pendiente, ej. Emitidas 15/20 y Recibidas 4/10, (Al hacer clic redireccionar a consulta de comprobantes (emitidos/recibidos) con el pre-filtro estatus_pago=pendiente y fecha
+
+***************************************************
+Título: Riesgos y alertas
+
+Grid de "Listas negras" Muestra un listado con los proveedores encontrados en las listas negras (histórico)
+
+Card con contador de "Cancelaciones meses anteriores" muestra conteo de CFDIs emitidos/recibidos cancelados en el periodo/seleccionado pero emitidos en meses anteriores (pendiente filtro en pantallas nominales emitidos/recibidos). Al hacer clic redireccionar a consulta de comprobantes (emitidos/recibios) con el pre-filtro cancelados="meses anteriores" y fecha
+
+Card con contador  de "Cancelaciones en meses posteriores" muestra conteo de CFDIs emitidos/recibidos emitidos en el mes seleccionado pero cancelados en meses posteriores (pendiente filtro en pantallas nominales emitidos/recibidos). Al hacer clic redireccionar a consulta de comprobantes (emitidos/recibios) con el pre-filtro cancelados="meses posteriores" y fecha
+
+Card con contador de "Cancelaciones pendientes" muestra conteo de CFFDIs emitidos pendientes de cancelar (Vigentes con Bandera SolicitudCancelacionActiva = 1) (pendiente filtro en pantallas nominales emitidos). Al hacer clic redireccionar a la consulta de comprobantes emitidos con el pre-filtro cancelados="pendientes" y fecha
+
+Card con contador de "Comprobantes inválidos" muestra conteo de CFDIs emitidos/recibidos inválidos en el periodo/seleccionado (pendiente filtro en pantallas nominales emitidos/recibidos). Al hacer clic redireccionar a la consulta de comprobantes emitidos/recibidos con el pre-filtro validación="invalidos" y fecha
+
+Card con contador de "Posibles duplicidades" muestra conteo de CFDIs emitidos/recibidos con posible duplicidad en el periodo/seleccionado. Al hacer clic redireccionar a la consulta de comprobantes emitidos/recibidos con el pre-filtro duplicidades=true y fecha
+
+***************************************************
+Título: Operación
+
+Grid de estatus internos "Comprobantes emitidos por estatus" muestra un listado paginable con conteos totales para cada estatus interno (En caso de usarlos)
+Grid de estatus internos "Comprobantes recibidos por estatus" muestra un listado paginable con conteos totales para cada estatus interno (En caso de usarlos)
+
+Card con vigencia de CSD
+Card con vigencia de FIEL
+
+
+***************************************************
+Título: Observables o Inconsistencias?
+
+Card con contador de "Ingresos emitidos PUE con forma de pago 99 (inconsistencia de llenado)". Al hacer clic redireccionar a la consulta de comprobantes emitidos con el pre-filtro PUE/99 (pendiente filtro en pantallas nominales emitidos/recibidos, agregar forma de pago)
+
+Card con contador de "Ingresos emitidos PUE con REP relacionados (sobre-ingreso IVA trasladado)". Al hacer clic redireccionar a la consulta de comprobantes emitidos con el pre-filtro PUE/REP (pendiente filtro en pantallas nominales emitidos/recibidos, pensar en logica de filtros REP)
+
+CCard con contador de "Egresos emitidos sin CFDI relacionados (inconistencia de llenado)". Al hacer clic redireccionar a la consulta de comprobantes emitidos con el pre-filtro Egreso (pendiente filtro en pantallas nominales emitidos/recibidos, pensar en logica de filtros sin Relaciones)
+
+Lo mismo para recibidos...
+
+
+
+
+Worker
+Envío por correo de reporte de control fiscal mensual
+
+Se trata de un servicio que se encargará de generar y enviar un reporte de control fiscal mensual a los usuarios de la empresa.
+
+Negocio
+El ciclo del servicio se ejecutará de forma diaria (configurable)
+El control de generación de reportes se basará en la fecha actual en la cual se ejecuta el servicio, por ej. si el servicio ejecuta su ciclo en el mes de Mayo, deberá validar que ya se hayan cumplido las horas de conciliación (96 horas - configurable) para entonces iniciar con el proceso de generación de reportes del mes vencido, en este caso Abril
+
+La lógica del servicio deberá recorrer cada integrador activo, después cada empresa activa del integrador
+Antes de generar el reporte de la empresa se deberá validar si no fue generado previamente consultando la tabla de control EmpresaReporteFiscal
+En caso de no haber sido generado se deberá generar el reporte de la empresa y mes correspondiente
+Se debe enviar por correo el reporte al integrador (recibiría un reporte por empresa registrada) y a todos los usuarios activos y propios de la empresa (siempre y cuando estos tengan rol Administrador)
+Se debe enviar siempre y cuando el usuario (ya sea inegrador o mortal administrador) tenga habilitada la notificación de tipo REPORTE_FISCAL (agregar al catálogo)
+
+Una vez enviado el reporte por correo (best effort) se deberá agregar el registro correspondiente en la tabla de control EmpresaReporteFiscal o en su defecto (catch) el mismo registro pero con el detalle del error
+
+Plantilla de correo (Por definir)
+Plantilla PDF (Por definir, necesito una estructura JSON con toda la información que ofrece el dashboard, el PDF podría tener un enlace que te lleve al detalle de consulta
+
+API REST
+/api/v1/reportes/control-fiscal (recibe token de tenant y parametros Año, Mes -> retorna JSON con lo mismo que ofrece el dashboard)

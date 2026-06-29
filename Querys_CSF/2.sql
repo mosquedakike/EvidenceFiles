@@ -1,0 +1,8 @@
+delete from EmpresaDocumentosSATConfig
+delete from	EmpresaConstanciasSituacionFiscal
+delete from	EmpresaCSFDatosIdentificacion
+delete from	EmpresaCSFDomicilios
+delete from	EmpresaCSFActividadesEconomicas
+delete from	EmpresaCSFRegimenes
+delete from	EmpresaCSFObligaciones
+delete from EmpresaDocumentosSAT
